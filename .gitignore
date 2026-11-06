@@ -1,0 +1,42 @@
+# 비밀값
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python / Django
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+staticfiles/
+media/
+db.sqlite3
+
+# Node / Expo
+node_modules/
+.expo/
+dist/
+web-build/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+ios/
+android/
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Claude Code 로컬 설정
+.claude/settings.local.json
