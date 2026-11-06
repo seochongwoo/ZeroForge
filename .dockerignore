@@ -1,0 +1,27 @@
+# 비밀값과 실제 데이터는 이미지에 들어가지 않는다 (P8)
+.env
+.env.*
+!.env.example
+*.sql
+*.dump
+data/
+backups/
+exports/
+
+.git
+.github
+.claude
+docs
+
+**/node_modules
+**/.expo
+**/dist
+**/web-build
+app/.vscode
+
+**/__pycache__
+**/*.pyc
+backend/.venv
+backend/.pytest_cache
+backend/staticfiles
+backend/web

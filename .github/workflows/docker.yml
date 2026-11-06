@@ -1,0 +1,53 @@
+name: docker
+
+# 배포 이미지가 실제로 빌드되고, 띄웠을 때 헬스체크·웹·API가 응답하는지 확인한다.
+on:
+  push:
+    branches: [main]
+    paths: ["Dockerfile", ".dockerignore", "app/**", "backend/**", ".github/workflows/docker.yml"]
+  pull_request:
+    paths: ["Dockerfile", ".dockerignore", "app/**", "backend/**", ".github/workflows/docker.yml"]
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    env:
+      # CI 안에서만 쓰는 가짜 값
+      CI_TOKEN: ci-only-token
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: zeroforge
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: zeroforge
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U zeroforge"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t zeroforge:ci .
+      - name: run container
+        run: |
+          docker run -d --name zf --network host \
+            -e PORT=8080 \
+            -e DJANGO_SECRET_KEY=ci-only-not-secret \
+            -e DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            -e DJANGO_SECURE_SSL_REDIRECT=false \
+            -e ZF_TOKEN="$CI_TOKEN" \
+            -e DATABASE_URL=postgres://zeroforge:ci-only-password@localhost:5432/zeroforge \
+            zeroforge:ci
+          for i in $(seq 1 30); do curl -sf http://localhost:8080/healthz && break; sleep 1; done
+      - name: smoke test
+        run: |
+          set -e
+          curl -sf http://localhost:8080/healthz
+          curl -sf http://localhost:8080/ | grep -qi '<html'
+          curl -sf http://localhost:8080/settings | grep -qi '<html'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/entries)" = 401
+          curl -sf -H "Authorization: Bearer $CI_TOKEN" http://localhost:8080/api/entries
+          JS=$(curl -s http://localhost:8080/ | grep -o '/_expo/static/js/web/entry-[^"]*\.js' | head -1)
+          curl -sfI "http://localhost:8080$JS" | grep -qi 'immutable'
+      - if: failure()
+        run: docker logs zf

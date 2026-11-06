@@ -49,3 +49,6 @@ Thumbs.db
 
 # Claude Code 로컬 설정
 .claude/settings.local.json
+
+# 로컬에서 배포 형태를 흉내 낼 때 생기는 빌드 결과
+backend/web/
