@@ -81,6 +81,8 @@ export default function WriteScreen() {
           router.push('/settings');
           return;
         }
+        // 설정 화면에서 돌아왔을 때도 바로 쓸 수 있게 (autoFocus는 첫 마운트에만 동작한다)
+        inputRef.current?.focus();
         await sync();
       })();
       return () => {
