@@ -5,6 +5,13 @@
 *.pem
 *.key
 
+# 실제 기록 (P8)
+*.dump
+*.sql
+*.sql.gz
+backups/
+exports/
+
 # Python / Django
 __pycache__/
 *.py[cod]
