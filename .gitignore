@@ -11,6 +11,8 @@
 *.sql.gz
 backups/
 exports/
+data/
+backend/**/fixtures/real_*
 
 # Python / Django
 __pycache__/
