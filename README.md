@@ -10,6 +10,7 @@ AI는 판정자가 아니라 서기(scribe)다.
 - [PRINCIPLES.md](PRINCIPLES.md) — 모든 PR이 확인하는 원칙
 - [docs/decisions/](docs/decisions/) — 결정 기록(ADR)
 - [docs/friction.md](docs/friction.md) — 쓰면서 느낀 마찰 = 백로그
+- [docs/deploy.md](docs/deploy.md) — 배포 방법
 
 ## 개발 환경
 

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { listEntries } from '@/lib/api';
 import { loadSettings, normalizeUrl, saveSettings } from '@/lib/settings';
@@ -19,6 +19,9 @@ export default function SettingsScreen() {
       if (s) {
         setServerUrl(s.serverUrl);
         setToken(s.token);
+      } else if (Platform.OS === 'web' && !__DEV__) {
+        // 배포된 웹은 API와 같은 주소에서 서빙된다 (ADR 0003). 토큰만 넣으면 된다.
+        setServerUrl(window.location.origin);
       }
     });
   }, []);

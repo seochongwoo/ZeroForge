@@ -5,3 +5,6 @@ django-cors-headers>=4.6,<5
 python-dotenv>=1.0,<2
 pytest>=8,<10
 pytest-django>=4.9,<5
+gunicorn>=23,<24
+whitenoise>=6.8,<7
+dj-database-url>=2.3,<4
