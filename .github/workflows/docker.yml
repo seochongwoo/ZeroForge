@@ -36,6 +36,7 @@ jobs:
             -e DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
             -e DJANGO_SECURE_SSL_REDIRECT=false \
             -e ZF_TOKEN="$CI_TOKEN" \
+            -e RAILWAY_PRIVATE_DOMAIN=zeroforge.railway.internal \
             -e DATABASE_URL=postgres://zeroforge:ci-only-password@localhost:5432/zeroforge \
             zeroforge:ci
           for i in $(seq 1 30); do curl -sf http://localhost:8080/healthz && break; sleep 1; done
@@ -43,6 +44,8 @@ jobs:
         run: |
           set -e
           curl -sf http://localhost:8080/healthz
+          # Railway 헬스체크는 이 호스트 이름으로 들어온다 (허용 안 되면 400 → 배포 실패)
+          curl -sf -H 'Host: healthcheck.railway.app' http://localhost:8080/healthz
           curl -sf http://localhost:8080/ | grep -qi '<html'
           curl -sf http://localhost:8080/settings | grep -qi '<html'
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/entries)" = 401

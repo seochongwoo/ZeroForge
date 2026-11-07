@@ -31,6 +31,15 @@ SECRET_KEY = env("DJANGO_SECRET_KEY")
 DEBUG = env("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 
+# Railway: 공개 도메인을 RAILWAY_PUBLIC_DOMAIN으로 넣어 주고,
+# 헬스체크는 healthcheck.railway.app 호스트로 들어온다 (허용하지 않으면 400 → 배포 실패)
+RAILWAY_PUBLIC_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+ON_RAILWAY = bool(RAILWAY_PUBLIC_DOMAIN or os.environ.get("RAILWAY_PRIVATE_DOMAIN"))
+if ON_RAILWAY:
+    ALLOWED_HOSTS += ["healthcheck.railway.app"]
+if RAILWAY_PUBLIC_DOMAIN:
+    ALLOWED_HOSTS += [RAILWAY_PUBLIC_DOMAIN]
+
 # 단일 사용자 토큰 (core/auth.py)
 ZF_TOKEN = env("ZF_TOKEN", "")
 
@@ -128,6 +137,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = env_list("DJANGO_CORS_ALLOWED_ORIGINS", "http://localhost:8081")
 # 관리 화면 로그인용 (예: https://zeroforge.up.railway.app)
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
+if RAILWAY_PUBLIC_DOMAIN:
+    CSRF_TRUSTED_ORIGINS += [f"https://{RAILWAY_PUBLIC_DOMAIN}"]
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
