@@ -138,6 +138,6 @@ def test_entry_is_immutable_no_update_or_delete_api(client, auth):
 
 
 def test_entry_has_no_score_or_status_fields():
-    # P1, P4: 점수·상태 필드가 생기면 실패한다
-    fields = {f.name for f in Entry._meta.get_fields()}
+    # P1, P4: 점수·상태 필드가 생기면 실패한다 (이름 연결 같은 역참조는 Entry의 칸이 아니다)
+    fields = {f.name for f in Entry._meta.get_fields() if not f.auto_created}
     assert fields == {"id", "content", "source", "written_at", "created_at"}

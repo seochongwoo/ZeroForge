@@ -12,18 +12,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { listEntries, type Entry, type NewEntry } from '@/lib/api';
+import { EntryItem, type Row } from '@/components/EntryItem';
+import { listEntries, listNamings, type Entry, type Naming, type NewEntry } from '@/lib/api';
 import { enqueue, flushOutbox, loadDraft, loadOutbox, saveDraft } from '@/lib/outbox';
 import { loadSettings, type ServerSettings } from '@/lib/settings';
 import { useColors } from '@/lib/theme';
-
-type Row = (Entry | NewEntry) & { pending: boolean };
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export default function WriteScreen() {
   const c = useColors();
@@ -36,7 +29,13 @@ export default function WriteScreen() {
   const [pending, setPending] = useState<NewEntry[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [namings, setNamings] = useState<Naming[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const loadingMore = useRef(false);
+  const expandedRef = useRef<string | null>(null);
+  useEffect(() => {
+    expandedRef.current = expandedId;
+  }, [expandedId]);
 
   // 작성 중이던 내용 복원. 이미 타이핑을 시작했다면 덮어쓰지 않는다.
   useEffect(() => {
@@ -59,6 +58,16 @@ export default function WriteScreen() {
     }
   }, []);
 
+  const reloadNamings = useCallback(async () => {
+    const s = settingsRef.current;
+    if (!s) return;
+    try {
+      setNamings(await listNamings(s));
+    } catch {
+      // 자동완성이 없어도 이름은 붙일 수 있다
+    }
+  }, []);
+
   const sync = useCallback(async () => {
     const s = settingsRef.current;
     if (!s) return;
@@ -66,7 +75,8 @@ export default function WriteScreen() {
     setNotice(result.error ?? null);
     await refreshPending();
     await reloadFirstPage();
-  }, [refreshPending, reloadFirstPage]);
+    await reloadNamings();
+  }, [refreshPending, reloadFirstPage, reloadNamings]);
 
   // 설정 화면에서 돌아올 때마다 설정을 다시 읽는다
   useFocusEffect(
@@ -81,8 +91,9 @@ export default function WriteScreen() {
           router.push('/settings');
           return;
         }
-        // 설정 화면에서 돌아왔을 때도 바로 쓸 수 있게 (autoFocus는 첫 마운트에만 동작한다)
-        inputRef.current?.focus();
+        // 설정 화면에서 돌아왔을 때도 바로 쓸 수 있게 (autoFocus는 첫 마운트에만 동작한다).
+        // 기록을 펼쳐 이름을 붙이던 중이면(이름 화면에서 돌아온 경우) 그대로 둔다
+        if (!expandedRef.current) inputRef.current?.focus();
         await sync();
       })();
       return () => {
@@ -136,6 +147,10 @@ export default function WriteScreen() {
     }
   }
 
+  const replaceEntry = useCallback((updated: Entry) => {
+    setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+  }, []);
+
   // 서버 기록 + 아직 outbox에 있는 기록을 함께 보여준다
   const rows: Row[] = useMemo(() => {
     const serverIds = new Set(entries.map((e) => e.id));
@@ -188,14 +203,17 @@ export default function WriteScreen() {
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           keyboardShouldPersistTaps="handled"
+          extraData={[expandedId, namings]}
           renderItem={({ item }) => (
-            <View style={[styles.row, { borderColor: c.border }]}>
-              <Text style={[styles.meta, { color: c.muted }]}>
-                {formatTime(item.written_at)}
-                {item.pending ? ' · 기기에만 저장됨' : ''}
-              </Text>
-              <Text style={[styles.content, { color: c.text }]}>{item.content}</Text>
-            </View>
+            <EntryItem
+              item={item}
+              expanded={expandedId === item.id}
+              onToggle={() => setExpandedId((cur) => (cur === item.id ? null : item.id))}
+              namings={namings}
+              getSettings={() => settingsRef.current}
+              onEntryChange={replaceEntry}
+              onNamingsChange={reloadNamings}
+            />
           )}
         />
       </View>
@@ -223,7 +241,4 @@ const styles = StyleSheet.create({
   button: { borderRadius: 8, paddingVertical: 10, paddingHorizontal: 22 },
   buttonText: { fontSize: 16, fontWeight: '600' },
   list: { flex: 1 },
-  row: { paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, gap: 4 },
-  meta: { fontSize: 12 },
-  content: { fontSize: 16, lineHeight: 24 },
 });

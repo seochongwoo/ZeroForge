@@ -12,6 +12,7 @@ export default function RootLayout() {
         {/* 첫 화면 = 입력창. 헤더도 없다 */}
         <Stack.Screen name="index" options={{ headerShown: false, title: 'ZeroForge' }} />
         <Stack.Screen name="settings" options={{ title: '설정' }} />
+        <Stack.Screen name="names/[id]" options={{ title: '이름' }} />
       </Stack>
     </ThemeProvider>
   );
