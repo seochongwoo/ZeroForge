@@ -4,7 +4,8 @@ from datetime import datetime
 from uuid import UUID
 
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch, Q
+from django.db.models import Max, Prefetch, Q
+from django.db.models.functions import Greatest
 from django.shortcuts import get_object_or_404
 from ninja import NinjaAPI, Query, Status
 from ninja.errors import HttpError
@@ -91,8 +92,18 @@ def find_or_create_naming(label: str) -> Naming:
 
 @api.get("/namings", response=list[NamingOut])
 def list_namings(request):
-    """모든 이름 (자동완성·모아 보기용). 개수는 돌려주지 않는다 (P4)."""
-    return namings_with_versions().order_by("label")
+    """기록이 하나라도 붙어 있는 이름 (이름 목록·자동완성용). 최근에 쓴 이름이 먼저.
+
+    "쓴" = 기록에 붙였거나 이름을 바꾼 때. 개수는 돌려주지 않는다 (P4).
+    모든 기록에서 떼어진 이름은 목록에서 빠지지만, 같은 이름을 다시 붙이면 그 이름(과 변천)으로 돌아온다.
+    """
+    accepted = NamingLink.Status.ACCEPTED
+    return (
+        namings_with_versions()
+        .filter(links__status=accepted)
+        .annotate(last_used=Greatest(Max("links__created_at"), Max("versions__created_at")))
+        .order_by("-last_used", "label")
+    )
 
 
 @api.get("/namings/{naming_id}", response=NamingDetail)

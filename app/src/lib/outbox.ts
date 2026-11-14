@@ -94,8 +94,8 @@ async function doFlush(settings: ServerSettings): Promise<FlushResult> {
     } catch (e) {
       error =
         e instanceof ApiError && e.status === 401
-          ? '토큰이 맞지 않습니다. 설정을 확인하세요.'
-          : '서버에 연결할 수 없습니다. 기록은 기기에 남아 있고 나중에 다시 보냅니다.';
+          ? '토큰이 맞지 않아요. 설정을 확인해 주세요. 기록은 기기에 남아 있어요.'
+          : '연결이 끊겨 기기에 남겨 두었어요. 연결되면 올라가요.';
       break; // 순서를 지키기 위해 여기서 멈추고 나중에 재시도
     }
   }

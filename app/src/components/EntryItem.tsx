@@ -13,16 +13,17 @@ import {
   type Source,
 } from '@/lib/api';
 import type { ServerSettings } from '@/lib/settings';
-import { useColors } from '@/lib/theme';
+import { fonts, noOutline, useColors, useLayout } from '@/lib/theme';
 
 export type Row = (Entry | (NewEntry & { namings?: NamingRef[] })) & { pending: boolean };
 
 const SOURCE_LABEL: Record<Source, string> = { web: '웹', ios: 'iPhone', android: 'Android' };
 
-export function formatTime(iso: string): string {
+/** 시각은 기록을 펼쳤을 때만 (UI_CONCEPT §4-2) */
+export function formatClock(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 type Props = {
@@ -41,9 +42,11 @@ type Props = {
 /** 기록 하나. 누르면 그 자리에서 펼쳐지고, 펼친 곳에서 이름을 붙인다 (UI_CONCEPT §4-3, §4-4). */
 export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEntryChange, onNamingsChange }: Props) {
   const c = useColors();
+  const layout = useLayout();
   const [label, setLabel] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
   const attached = useMemo(() => item.namings ?? [], [item.namings]);
 
   // 이미 쓴 이름을 고를 수 있게. AI가 아니라 단순한 글자 비교다 (P2)
@@ -58,7 +61,7 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
 
   async function run(action: (s: ServerSettings) => Promise<Entry>) {
     const s = getSettings();
-    if (!s || busy) return;
+    if (!s || busy) return false;
     setBusy(true);
     setMessage(null);
     try {
@@ -79,19 +82,29 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
     if (await run((s) => attachNaming(s, item.id, v))) setLabel('');
   }
 
+  const nameStyle = [styles.name, { color: c.ink, fontSize: layout.name, fontFamily: fonts.sans }];
+
   return (
-    <View style={[styles.row, { borderColor: c.border }]}>
+    <View style={styles.row}>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded }}
         accessibilityHint={expanded ? '접기' : '펼쳐서 이름 붙이기'}
         onPress={onToggle}>
-        <Text style={[styles.meta, { color: c.muted }]}>
-          {formatTime(item.written_at)}
-          {item.pending ? ' · 기기에만 저장됨' : ''}
-          {expanded ? ` · ${SOURCE_LABEL[item.source]}` : ''}
+        {expanded && (
+          <Text style={[styles.meta, { color: c.muted }]}>
+            {formatClock(item.written_at)} · {SOURCE_LABEL[item.source]}
+          </Text>
+        )}
+        <Text style={[styles.content, layout.body, { color: c.ink, fontFamily: fonts.serif }]}>
+          {item.pending && (
+            // ○ = 아직 기기에만 있음. 경고색 없이 조용히 (§4-2)
+            <Text style={{ color: c.muted }} accessibilityLabel="아직 기기에만 있음">
+              {'○ '}
+            </Text>
+          )}
+          {item.content}
         </Text>
-        <Text style={[styles.content, { color: c.text }]}>{item.content}</Text>
       </Pressable>
 
       {attached.length > 0 && (
@@ -103,7 +116,7 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
                 accessibilityHint="이 이름의 기록 모아 보기"
                 onPress={() => router.push({ pathname: '/names/[id]', params: { id: n.id } })}
                 hitSlop={6}>
-                <Text style={[styles.name, { color: c.text }]}>{n.label}</Text>
+                <Text style={nameStyle}>{n.label}</Text>
               </Pressable>
               {expanded && (
                 <Pressable
@@ -125,14 +138,20 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
         ) : (
           <View style={styles.namer}>
             <TextInput
-              style={[styles.nameInput, { color: c.text, borderColor: c.border, backgroundColor: c.surface }]}
+              style={[
+                styles.nameInput,
+                noOutline,
+                { color: c.ink, borderColor: focused ? c.muted : c.rule, backgroundColor: c.surface },
+              ]}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
               value={label}
               onChangeText={(v) => {
                 setLabel(v);
                 setMessage(null);
               }}
               onSubmitEditing={() => attach(label)}
-              placeholder="이름 붙이기"
+              placeholder="이름"
               placeholderTextColor={c.muted}
               accessibilityLabel="이 기록에 붙일 이름"
               maxLength={80}
@@ -147,13 +166,13 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
                     accessibilityRole="button"
                     accessibilityLabel={`${n.label} 붙이기`}
                     onPress={() => attach(n.label)}
-                    style={[styles.suggestion, { borderColor: c.border }]}>
+                    hitSlop={4}>
                     <Text style={[styles.suggestionText, { color: c.muted }]}>{n.label}</Text>
                   </Pressable>
                 ))}
               </View>
             )}
-            {message && <Text style={[styles.hint, { color: c.warn }]}>{message}</Text>}
+            {message && <Text style={[styles.hint, { color: c.muted }]}>{message}</Text>}
           </View>
         ))}
     </View>
@@ -161,17 +180,16 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
 }
 
 const styles = StyleSheet.create({
-  row: { paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, gap: 6 },
-  meta: { fontSize: 12, marginBottom: 4 },
-  content: { fontSize: 16, lineHeight: 24 },
-  names: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  row: { paddingVertical: 12, gap: 6 },
+  meta: { fontSize: 13, marginBottom: 4 },
+  content: {},
+  names: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 14, rowGap: 4 },
   nameChip: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  name: { fontSize: 14, fontWeight: '500' },
+  name: { fontWeight: '500' },
   detach: { fontSize: 16, lineHeight: 18, paddingHorizontal: 2 },
   namer: { gap: 8, marginTop: 4 },
-  nameInput: { borderWidth: 1, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, fontSize: 14 },
-  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  suggestion: { borderWidth: 1, borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10 },
-  suggestionText: { fontSize: 13 },
-  hint: { fontSize: 12 },
+  nameInput: { borderWidth: 1, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 12, fontSize: 14 },
+  suggestions: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 14, rowGap: 6 },
+  suggestionText: { fontSize: 14, textDecorationLine: 'underline' },
+  hint: { fontSize: 13 },
 });

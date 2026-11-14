@@ -197,3 +197,21 @@ def test_naming_models_have_no_score_fields():
     assert own(NamingVersion) == {"id", "naming", "label", "created_at"}
     # status는 연결의 출처 상태(제안/수락/거절)일 뿐 평가가 아니다 (PLAN.md §5 Link)
     assert own(NamingLink) == {"entry", "naming", "author", "status", "created_at"}
+
+
+def test_list_namings_recent_first_and_hides_unused(api):
+    a, b, c = new_entry(api), new_entry(api), new_entry(api)
+    first = api.post(f"/entries/{a}/namings", {"label": "가장 먼저"}).json()["namings"][0]["id"]
+    api.post(f"/entries/{b}/namings", {"label": "그다음"})
+    gone = api.post(f"/entries/{c}/namings", {"label": "뗀 이름"}).json()["namings"][0]["id"]
+    api.delete(f"/entries/{c}/namings/{gone}")
+    assert [n["label"] for n in api.get("/namings").json()] == ["그다음", "가장 먼저"]
+
+    # 이름을 바꾸면 최근에 쓴 것이 된다
+    api.post(f"/namings/{first}/versions", {"label": "바뀐 이름"})
+    assert [n["label"] for n in api.get("/namings").json()] == ["바뀐 이름", "그다음"]
+
+    # 뗀 이름을 다시 붙이면 같은 이름으로 돌아온다
+    api.post(f"/entries/{c}/namings", {"label": "뗀 이름"})
+    body = api.get("/namings").json()
+    assert body[0]["id"] == gone
