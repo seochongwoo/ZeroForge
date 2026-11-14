@@ -13,6 +13,8 @@ backups/
 exports/
 data/
 backend/**/fixtures/real_*
+# 사람들과 나눈 대화 기록: 다른 사람의 말이라 저장소에 올리지 않는다
+docs/interviews/
 
 # Python / Django
 __pycache__/
