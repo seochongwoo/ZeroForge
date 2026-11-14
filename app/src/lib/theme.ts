@@ -47,6 +47,10 @@ export function useLayout() {
   const desktop = width >= 1024;
   return {
     desktop,
+    /** 이름 목록을 옆 칸에 둘 수 있는 폭. 태블릿 폭(창을 줄인 데스크톱 포함)부터. 그보다 좁으면 입력창 아래 한 줄 */
+    sideNames: width >= 768,
+    /** 옆 칸 너비: 데스크톱 200, 태블릿 폭 150 */
+    asideWidth: desktop ? ASIDE_WIDTH : 150,
     /** 내 글 크기 (휴대폰 18 / 데스크톱 20, 행간 1.8) */
     body: desktop ? { fontSize: 20, lineHeight: 36 } : { fontSize: 18, lineHeight: 32 },
     /** 이름 크기 (14 / 15) */

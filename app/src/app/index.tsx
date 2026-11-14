@@ -19,7 +19,7 @@ import { DateDivider, toStream } from '@/components/Stream';
 import { listEntries, listNamings, type Entry, type Naming, type NewEntry } from '@/lib/api';
 import { enqueue, flushOutbox, loadDraft, loadOutbox, saveDraft } from '@/lib/outbox';
 import { loadSettings, type ServerSettings } from '@/lib/settings';
-import { ASIDE_WIDTH, COLUMN_MAX, fonts, noOutline, useColors, useLayout } from '@/lib/theme';
+import { COLUMN_MAX, fonts, noOutline, useColors, useLayout } from '@/lib/theme';
 
 export default function WriteScreen() {
   const c = useColors();
@@ -216,10 +216,10 @@ export default function WriteScreen() {
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: c.paper }]}>
-      <View style={styles.frame}>
-        {/* 데스크톱: 왼쪽 칸에 이름. 오른쪽은 Step 8의 여백 주석 자리라 지금은 비워 둔다 */}
-        {layout.desktop && (
-          <View style={styles.aside}>
+      <View style={[styles.frame, layout.sideNames && styles.framePadded]}>
+        {/* 768px 이상: 왼쪽 칸에 이름. 오른쪽은 Step 8의 여백 주석 자리라 지금은 비워 둔다 */}
+        {layout.sideNames && (
+          <View style={{ width: layout.asideWidth }}>
             <NameIndex namings={namings} variant="column" />
           </View>
         )}
@@ -239,13 +239,13 @@ export default function WriteScreen() {
             ListHeaderComponent={
               <View>
                 {writeBox}
-                {!layout.desktop && <NameIndex namings={namings} variant="row" />}
+                {!layout.sideNames && <NameIndex namings={namings} variant="row" />}
               </View>
             }
             onEndReached={loadMore}
             onEndReachedThreshold={0.5}
             keyboardShouldPersistTaps="handled"
-            extraData={[expandedId, namings, layout.desktop]}
+            extraData={[expandedId, namings, layout.sideNames]}
             renderItem={({ item: s }) =>
               s.kind === 'date' ? (
                 <DateDivider label={s.label} />
@@ -263,7 +263,8 @@ export default function WriteScreen() {
             }
           />
         </View>
-        {layout.desktop && <View style={styles.aside} />}
+        {/* 데스크톱에서만 오른쪽도 같은 너비로 비워 본문을 화면 가운데에 둔다. 태블릿 폭에서는 본문에 자리를 준다 */}
+        {layout.desktop && <View style={{ width: layout.asideWidth }} />}
       </View>
     </SafeAreaView>
   );
@@ -271,8 +272,8 @@ export default function WriteScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  frame: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 40 },
-  aside: { width: ASIDE_WIDTH },
+  frame: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 32 },
+  framePadded: { paddingLeft: 16 },
   column: { flex: 1, maxWidth: COLUMN_MAX, paddingHorizontal: 16 },
   topBar: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingVertical: 12 },
   link: { fontSize: 13 },
