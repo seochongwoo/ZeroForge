@@ -167,6 +167,7 @@ export default function NamingScreen() {
         {!naming && message && <Text style={[styles.hint, { color: c.muted, marginTop: 16 }]}>{message}</Text>}
         <FlatList
           data={stream}
+          showsVerticalScrollIndicator={false}
           keyExtractor={(s) => s.key}
           ListHeaderComponent={header}
           keyboardShouldPersistTaps="handled"
