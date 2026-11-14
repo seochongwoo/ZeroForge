@@ -232,6 +232,8 @@ export default function WriteScreen() {
 
           <FlatList
             style={styles.list}
+            // 흐름 옆의 스크롤 막대는 숨긴다. 휠·터치 스크롤은 그대로
+            showsVerticalScrollIndicator={false}
             data={stream}
             keyExtractor={(s) => s.key}
             ListHeaderComponent={
