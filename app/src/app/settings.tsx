@@ -29,7 +29,7 @@ export default function SettingsScreen() {
   async function onSave() {
     const settings = { serverUrl: normalizeUrl(serverUrl), token: token.trim() };
     if (!/^https?:\/\//.test(settings.serverUrl) || !settings.token) {
-      setMessage('서버 주소(http:// 또는 https://로 시작)와 토큰을 모두 입력하세요.');
+      setMessage('서버 주소(http:// 또는 https://로 시작)와 토큰을 모두 적어 주세요.');
       return;
     }
     setBusy(true);
@@ -38,7 +38,7 @@ export default function SettingsScreen() {
       await listEntries(settings);
     } catch {
       setBusy(false);
-      setMessage('서버에 연결하지 못했습니다. 주소와 토큰을 확인하세요.');
+      setMessage('서버에 연결하지 못했어요. 주소와 토큰을 확인해 주세요.');
       return;
     }
     await saveSettings(settings);
@@ -47,10 +47,10 @@ export default function SettingsScreen() {
     else router.replace('/');
   }
 
-  const inputStyle = [styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface }];
+  const inputStyle = [styles.input, { color: c.ink, borderColor: c.rule, backgroundColor: c.surface }];
 
   return (
-    <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={styles.container}>
+    <ScrollView style={{ backgroundColor: c.paper }} contentContainerStyle={styles.container}>
       <View style={styles.field}>
         <Text style={[styles.label, { color: c.muted }]}>서버 주소</Text>
         <TextInput
@@ -77,14 +77,16 @@ export default function SettingsScreen() {
           secureTextEntry
         />
       </View>
-      {message && <Text style={[styles.message, { color: c.warn }]}>{message}</Text>}
+      {message && <Text style={[styles.message, { color: c.muted }]}>{message}</Text>}
       <Pressable
         accessibilityRole="button"
         onPress={onSave}
         disabled={busy}
-        style={({ pressed }) => [styles.button, { backgroundColor: c.accent, opacity: busy || pressed ? 0.6 : 1 }]}>
-        <Text style={[styles.buttonText, { color: c.onAccent }]}>{busy ? '확인 중…' : '저장'}</Text>
+        style={({ pressed }) => [styles.button, { backgroundColor: c.ink, opacity: busy || pressed ? 0.6 : 1 }]}>
+        <Text style={[styles.buttonText, { color: c.paper }]}>{busy ? '확인 중…' : '저장'}</Text>
       </Pressable>
+      {/* ZeroForge 이름은 여기에만 작게 (UI_CONCEPT §3-3) */}
+      <Text style={[styles.brand, { color: c.muted }]}>ZeroForge</Text>
     </ScrollView>
   );
 }
@@ -97,4 +99,5 @@ const styles = StyleSheet.create({
   message: { fontSize: 14 },
   button: { borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
   buttonText: { fontSize: 16, fontWeight: '600' },
+  brand: { fontSize: 12, letterSpacing: 0.5, textAlign: 'center', marginTop: 24 },
 });

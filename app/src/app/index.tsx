@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -13,13 +14,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EntryItem, type Row } from '@/components/EntryItem';
+import { NameIndex } from '@/components/NameIndex';
+import { DateDivider, toStream } from '@/components/Stream';
 import { listEntries, listNamings, type Entry, type Naming, type NewEntry } from '@/lib/api';
 import { enqueue, flushOutbox, loadDraft, loadOutbox, saveDraft } from '@/lib/outbox';
 import { loadSettings, type ServerSettings } from '@/lib/settings';
-import { useColors } from '@/lib/theme';
+import { ASIDE_WIDTH, COLUMN_MAX, fonts, noOutline, useColors, useLayout } from '@/lib/theme';
 
 export default function WriteScreen() {
   const c = useColors();
+  const layout = useLayout();
   const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   const typedRef = useRef(false);
   const settingsRef = useRef<ServerSettings | null>(null);
@@ -31,6 +35,7 @@ export default function WriteScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [namings, setNamings] = useState<Naming[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
   const loadingMore = useRef(false);
   const expandedRef = useRef<string | null>(null);
   useEffect(() => {
@@ -160,62 +165,103 @@ export default function WriteScreen() {
   }, [entries, pending]);
 
   const canSave = text.trim().length > 0;
+  const stream = useMemo(() => toStream(rows), [rows]);
+
+  // 웹: Ctrl/⌘ + Enter로 남기기 (§4-1)
+  function onKeyPress(e: { nativeEvent: { key: string; ctrlKey?: boolean; metaKey?: boolean } }) {
+    const { key, ctrlKey, metaKey } = e.nativeEvent;
+    if (key === 'Enter' && (ctrlKey || metaKey)) {
+      (e as unknown as { preventDefault?: () => void }).preventDefault?.();
+      onSave();
+    }
+  }
+
+  const writeBox = (
+    <>
+      <TextInput
+        ref={inputRef}
+        style={[
+          styles.input,
+          layout.body,
+          noOutline,
+          { color: c.ink, borderColor: focused ? c.muted : c.rule, backgroundColor: c.surface, fontFamily: fonts.serif },
+        ]}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        value={text}
+        onChangeText={onChangeText}
+        onKeyPress={onKeyPress}
+        // 무엇을 쓸지는 내가 정한다: 질문·안내 문구를 띄우지 않는다 (§4-1)
+        accessibilityLabel="쓰기"
+        multiline
+        autoFocus
+        textAlignVertical="top"
+      />
+      <View style={styles.actions}>
+        {notice ? <Text style={[styles.notice, { color: c.muted }]}>{notice}</Text> : <View />}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityHint={Platform.OS === 'web' ? 'Ctrl 또는 ⌘ + Enter' : undefined}
+          onPress={onSave}
+          disabled={!canSave}
+          style={({ pressed }) => [
+            styles.button,
+            { backgroundColor: c.ink, opacity: !canSave ? 0.3 : pressed ? 0.7 : 1 },
+          ]}>
+          <Text style={[styles.buttonText, { color: c.paper }]}>남기기</Text>
+        </Pressable>
+      </View>
+    </>
+  );
 
   return (
-    <SafeAreaView style={[styles.screen, { backgroundColor: c.bg }]}>
-      <View style={styles.column}>
-        <View style={styles.topBar}>
-          <Text style={[styles.brand, { color: c.muted }]}>ZeroForge</Text>
-          <Pressable accessibilityRole="button" onPress={() => router.push('/settings')} hitSlop={12}>
-            <Text style={[styles.link, { color: c.muted }]}>설정</Text>
-          </Pressable>
-        </View>
+    <SafeAreaView style={[styles.screen, { backgroundColor: c.paper }]}>
+      <View style={styles.frame}>
+        {/* 데스크톱: 왼쪽 칸에 이름. 오른쪽은 Step 8의 여백 주석 자리라 지금은 비워 둔다 */}
+        {layout.desktop && (
+          <View style={styles.aside}>
+            <NameIndex namings={namings} variant="column" />
+          </View>
+        )}
+        <View style={styles.column}>
+          <View style={styles.topBar}>
+            <Pressable accessibilityRole="button" onPress={() => router.push('/settings')} hitSlop={12}>
+              <Text style={[styles.link, { color: c.muted }]}>설정</Text>
+            </Pressable>
+          </View>
 
-        <TextInput
-          ref={inputRef}
-          style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface }]}
-          value={text}
-          onChangeText={onChangeText}
-          placeholder="지금 떠오르는 것을, 아무리 짧아도"
-          placeholderTextColor={c.muted}
-          multiline
-          autoFocus
-          textAlignVertical="top"
-        />
-        <View style={styles.actions}>
-          {notice ? <Text style={[styles.notice, { color: c.warn }]}>{notice}</Text> : <View />}
-          <Pressable
-            accessibilityRole="button"
-            onPress={onSave}
-            disabled={!canSave}
-            style={({ pressed }) => [
-              styles.button,
-              { backgroundColor: c.accent, opacity: !canSave ? 0.35 : pressed ? 0.7 : 1 },
-            ]}>
-            <Text style={[styles.buttonText, { color: c.onAccent }]}>저장</Text>
-          </Pressable>
+          <FlatList
+            style={styles.list}
+            data={stream}
+            keyExtractor={(s) => s.key}
+            ListHeaderComponent={
+              <View>
+                {writeBox}
+                {!layout.desktop && <NameIndex namings={namings} variant="row" />}
+              </View>
+            }
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.5}
+            keyboardShouldPersistTaps="handled"
+            extraData={[expandedId, namings, layout.desktop]}
+            renderItem={({ item: s }) =>
+              s.kind === 'date' ? (
+                <DateDivider label={s.label} />
+              ) : (
+                <EntryItem
+                  item={s.row}
+                  expanded={expandedId === s.row.id}
+                  onToggle={() => setExpandedId((cur) => (cur === s.row.id ? null : s.row.id))}
+                  namings={namings}
+                  getSettings={() => settingsRef.current}
+                  onEntryChange={replaceEntry}
+                  onNamingsChange={reloadNamings}
+                />
+              )
+            }
+          />
         </View>
-
-        <FlatList
-          style={styles.list}
-          data={rows}
-          keyExtractor={(r) => r.id}
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.5}
-          keyboardShouldPersistTaps="handled"
-          extraData={[expandedId, namings]}
-          renderItem={({ item }) => (
-            <EntryItem
-              item={item}
-              expanded={expandedId === item.id}
-              onToggle={() => setExpandedId((cur) => (cur === item.id ? null : item.id))}
-              namings={namings}
-              getSettings={() => settingsRef.current}
-              onEntryChange={replaceEntry}
-              onNamingsChange={reloadNamings}
-            />
-          )}
-        />
+        {layout.desktop && <View style={styles.aside} />}
       </View>
     </SafeAreaView>
   );
@@ -223,22 +269,21 @@ export default function WriteScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  column: { flex: 1, width: '100%', maxWidth: 680, alignSelf: 'center', paddingHorizontal: 16 },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
-  brand: { fontSize: 14, letterSpacing: 0.5 },
-  link: { fontSize: 14 },
+  frame: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 40 },
+  aside: { width: ASIDE_WIDTH },
+  column: { flex: 1, maxWidth: COLUMN_MAX, paddingHorizontal: 16 },
+  topBar: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', paddingVertical: 12 },
+  link: { fontSize: 13 },
   input: {
     minHeight: 120,
-    maxHeight: 280,
+    maxHeight: 320,
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 8,
     padding: 14,
-    fontSize: 17,
-    lineHeight: 26,
   },
   actions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingVertical: 10 },
   notice: { flex: 1, fontSize: 13 },
-  button: { borderRadius: 8, paddingVertical: 10, paddingHorizontal: 22 },
-  buttonText: { fontSize: 16, fontWeight: '600' },
+  button: { borderRadius: 6, paddingVertical: 9, paddingHorizontal: 20 },
+  buttonText: { fontSize: 15, fontWeight: '600' },
   list: { flex: 1 },
 });
