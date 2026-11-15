@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
@@ -13,11 +13,17 @@ import {
   type Source,
 } from '@/lib/api';
 import type { ServerSettings } from '@/lib/settings';
-import { fonts, noOutline, useColors, useLayout } from '@/lib/theme';
+import { finePointer, fonts, noOutline, useColors, useLayout } from '@/lib/theme';
 
-export type Row = (Entry | (NewEntry & { namings?: NamingRef[] })) & { pending: boolean };
+export type Row = (Entry | (NewEntry & { namings?: NamingRef[] })) & {
+  pending: boolean;
+};
 
-const SOURCE_LABEL: Record<Source, string> = { web: '웹', ios: 'iPhone', android: 'Android' };
+const SOURCE_LABEL: Record<Source, string> = {
+  web: '웹',
+  ios: 'iPhone',
+  android: 'Android',
+};
 
 /** 시각은 기록을 펼쳤을 때만 (UI_CONCEPT §4-2) */
 export function formatClock(iso: string): string {
@@ -47,6 +53,7 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  const nameInputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   const attached = useMemo(() => item.namings ?? [], [item.namings]);
 
   // 이미 쓴 이름을 고를 수 있게. AI가 아니라 단순한 글자 비교다 (P2)
@@ -80,6 +87,13 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
     const v = value.trim();
     if (!v) return;
     if (await run((s) => attachNaming(s, item.id, v))) setLabel('');
+    // 고른 이름을 누르면 커서가 빠진다. 이어서 또 붙일 수 있게 되돌린다 (데스크톱만)
+    if (finePointer) nameInputRef.current?.focus();
+  }
+
+  // 웹: Esc로 접기
+  function onNameKeyPress(e: { nativeEvent: { key: string } }) {
+    if (e.nativeEvent.key === 'Escape') onToggle();
   }
 
   const nameStyle = [styles.name, { color: c.ink, fontSize: layout.name, fontFamily: fonts.sans }];
@@ -138,10 +152,20 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
         ) : (
           <View style={styles.namer}>
             <TextInput
+              ref={nameInputRef}
+              // 펼치는 건 대개 이름을 붙이려는 것. 데스크톱에서는 바로 쓸 수 있게
+              autoFocus={finePointer}
+              onKeyPress={onNameKeyPress}
+              // 붙인 뒤에도 커서를 그대로 둔다: 이름을 연달아 붙일 수 있게
+              submitBehavior="submit"
               style={[
                 styles.nameInput,
                 noOutline,
-                { color: c.ink, borderColor: focused ? c.muted : c.rule, backgroundColor: c.surface },
+                {
+                  color: c.ink,
+                  borderColor: focused ? c.muted : c.rule,
+                  backgroundColor: c.surface,
+                },
               ]}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
@@ -156,7 +180,6 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
               accessibilityLabel="이 기록에 붙일 이름"
               maxLength={80}
               returnKeyType="done"
-              editable={!busy}
             />
             {suggestions.length > 0 && (
               <View style={styles.suggestions}>
@@ -188,8 +211,19 @@ const styles = StyleSheet.create({
   name: { fontWeight: '500' },
   detach: { fontSize: 16, lineHeight: 18, paddingHorizontal: 2 },
   namer: { gap: 8, marginTop: 4 },
-  nameInput: { borderWidth: 1, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 12, fontSize: 14 },
-  suggestions: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 14, rowGap: 6 },
+  nameInput: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+  },
+  suggestions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: 14,
+    rowGap: 6,
+  },
   suggestionText: { fontSize: 14, textDecorationLine: 'underline' },
   hint: { fontSize: 13 },
 });
