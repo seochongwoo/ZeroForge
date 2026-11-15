@@ -63,3 +63,10 @@ export const COLUMN_MAX = 640;
 /** 웹 브라우저의 기본 포커스 테두리(파랑·노랑)를 끈다. 대신 입력칸 테두리 색으로 포커스를 보여준다 */
 export const noOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null;
 export const ASIDE_WIDTH = 200;
+
+/** 마우스와 키보드를 쓰는 환경인가 (웹 데스크톱). 여기서만 입력칸에 커서를 먼저 둔다: 휴대폰에서는 키보드가 튀어나와 화면을 가린다 */
+export const finePointer =
+  Platform.OS === 'web' &&
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(hover: hover) and (pointer: fine)').matches;

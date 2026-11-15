@@ -3,6 +3,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { EntryItem } from '@/components/EntryItem';
+import { NameIndex } from '@/components/NameIndex';
 import { DateDivider, toStream } from '@/components/Stream';
 import {
   getNaming,
@@ -14,7 +15,7 @@ import {
   type NamingDetail,
 } from '@/lib/api';
 import { loadSettings, type ServerSettings } from '@/lib/settings';
-import { COLUMN_MAX, fonts, noOutline, useColors } from '@/lib/theme';
+import { COLUMN_MAX, fonts, noOutline, useColors, useLayout } from '@/lib/theme';
 
 /** 이름이 바뀐 날: "11월 7일" (올해가 아니면 연도도) */
 function formatDate(iso: string): string {
@@ -27,6 +28,7 @@ function formatDate(iso: string): string {
 export default function NamingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const c = useColors();
+  const layout = useLayout();
   const settingsRef = useRef<ServerSettings | null>(null);
 
   const [naming, setNaming] = useState<NamingDetail | null>(null);
@@ -54,6 +56,9 @@ export default function NamingScreen() {
     useCallback(() => {
       (async () => {
         settingsRef.current = await loadSettings();
+        // 옆 칸에서 다른 이름으로 옮겨 왔을 때: 하던 일(이름 바꾸기, 펼친 기록)은 접는다
+        setRenaming(false);
+        setExpandedId(null);
         await load();
       })();
     }, [load]),
@@ -80,21 +85,18 @@ export default function NamingScreen() {
   }
 
   // 이 화면에서 이름을 떼면 목록에서도 빠진다
-  const onEntryChange = useCallback(
-    (updated: Entry) => {
-      setNaming((prev) => {
-        if (!prev) return prev;
-        const stillHere = updated.namings.some((n) => n.id === prev.id);
-        return {
-          ...prev,
-          entries: stillHere
-            ? prev.entries.map((e) => (e.id === updated.id ? updated : e))
-            : prev.entries.filter((e) => e.id !== updated.id),
-        };
-      });
-    },
-    [],
-  );
+  const onEntryChange = useCallback((updated: Entry) => {
+    setNaming((prev) => {
+      if (!prev) return prev;
+      const stillHere = updated.namings.some((n) => n.id === prev.id);
+      return {
+        ...prev,
+        entries: stillHere
+          ? prev.entries.map((e) => (e.id === updated.id ? updated : e))
+          : prev.entries.filter((e) => e.id !== updated.id),
+      };
+    });
+  }, []);
 
   const stream = useMemo(() => toStream((naming?.entries ?? []).map((e) => ({ ...e, pending: false }))), [naming]);
 
@@ -103,91 +105,112 @@ export default function NamingScreen() {
   const current = versions[versions.length - 1];
 
   const header = naming ? (
-    <View style={styles.header}>
-      {/* 이름의 변천: 옛 이름은 지우지 않고 줄을 긋는다 */}
-      <View style={styles.history} accessibilityLabel={`이름의 변천: ${versions.map((v) => v.label).join(', ')}`}>
-        {older.map((v, i) => (
-          <View key={`${v.created_at}-${i}`} style={styles.version}>
-            <Text style={[styles.oldLabel, { color: c.muted, fontFamily: fonts.sans }]}>{v.label}</Text>
-            <Text style={[styles.date, { color: c.muted }]}>{formatDate(v.created_at)}</Text>
-          </View>
-        ))}
-        {current && (
-          <View style={styles.version}>
-            <Text style={[styles.currentLabel, { color: c.ink, fontFamily: fonts.sans }]}>{current.label}</Text>
-            <Text style={[styles.date, { color: c.muted }]}>{formatDate(current.created_at)}</Text>
-          </View>
-        )}
-      </View>
-
-      {renaming ? (
-        <View style={styles.renameRow}>
-          <TextInput
-            style={[styles.input, noOutline, { color: c.ink, borderColor: c.muted, backgroundColor: c.surface }]}
-            value={draft}
-            onChangeText={(v) => {
-              setDraft(v);
-              setMessage(null);
-            }}
-            onSubmitEditing={onRename}
-            autoFocus
-            maxLength={80}
-            accessibilityLabel="새 이름"
-            returnKeyType="done"
-          />
-          <Pressable accessibilityRole="button" onPress={onRename} disabled={busy} hitSlop={8}>
-            <Text style={[styles.action, { color: c.ink }]}>바꾸기</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" onPress={() => setRenaming(false)} hitSlop={8}>
-            <Text style={[styles.action, { color: c.muted }]}>그만두기</Text>
-          </Pressable>
+    <View>
+      {!layout.sideNames && <NameIndex namings={namings} variant="row" currentId={id} />}
+      <View style={styles.header}>
+        {/* 이름의 변천: 옛 이름은 지우지 않고 줄을 긋는다 */}
+        <View style={styles.history} accessibilityLabel={`이름의 변천: ${versions.map((v) => v.label).join(', ')}`}>
+          {older.map((v, i) => (
+            <View key={`${v.created_at}-${i}`} style={styles.version}>
+              <Text style={[styles.oldLabel, { color: c.muted, fontFamily: fonts.sans }]}>{v.label}</Text>
+              <Text style={[styles.date, { color: c.muted }]}>{formatDate(v.created_at)}</Text>
+            </View>
+          ))}
+          {current && (
+            <View style={styles.version}>
+              <Text style={[styles.currentLabel, { color: c.ink, fontFamily: fonts.sans }]}>{current.label}</Text>
+              <Text style={[styles.date, { color: c.muted }]}>{formatDate(current.created_at)}</Text>
+            </View>
+          )}
         </View>
-      ) : (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            setDraft(naming.label);
-            setRenaming(true);
-          }}
-          hitSlop={8}>
-          <Text style={[styles.action, { color: c.muted }]}>이름 바꾸기</Text>
-        </Pressable>
-      )}
-      {renaming && (
-        <Text style={[styles.hint, { color: c.muted }]}>지금 이름은 지워지지 않고 변천으로 남아요.</Text>
-      )}
-      {message && <Text style={[styles.hint, { color: c.muted }]}>{message}</Text>}
+
+        {renaming ? (
+          <View style={styles.renameRow}>
+            <TextInput
+              style={[
+                styles.input,
+                noOutline,
+                {
+                  color: c.ink,
+                  borderColor: c.muted,
+                  backgroundColor: c.surface,
+                },
+              ]}
+              value={draft}
+              onChangeText={(v) => {
+                setDraft(v);
+                setMessage(null);
+              }}
+              onSubmitEditing={onRename}
+              onKeyPress={(e) => {
+                if (e.nativeEvent.key === 'Escape') setRenaming(false);
+              }}
+              autoFocus
+              maxLength={80}
+              accessibilityLabel="새 이름"
+              returnKeyType="done"
+            />
+            <Pressable accessibilityRole="button" onPress={onRename} disabled={busy} hitSlop={8}>
+              <Text style={[styles.action, { color: c.ink }]}>바꾸기</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => setRenaming(false)} hitSlop={8}>
+              <Text style={[styles.action, { color: c.muted }]}>그만두기</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setDraft(naming.label);
+              setRenaming(true);
+            }}
+            hitSlop={8}>
+            <Text style={[styles.action, { color: c.muted }]}>이름 바꾸기</Text>
+          </Pressable>
+        )}
+        {renaming && <Text style={[styles.hint, { color: c.muted }]}>지금 이름은 지워지지 않고 변천으로 남아요.</Text>}
+        {message && <Text style={[styles.hint, { color: c.muted }]}>{message}</Text>}
+      </View>
     </View>
   ) : undefined;
 
   return (
     <View style={[styles.screen, { backgroundColor: c.paper }]}>
       <Stack.Screen options={{ title: naming?.label ?? '이름' }} />
-      <View style={styles.column}>
-        {!naming && message && <Text style={[styles.hint, { color: c.muted, marginTop: 16 }]}>{message}</Text>}
-        <FlatList
-          data={stream}
-          showsVerticalScrollIndicator={false}
-          keyExtractor={(s) => s.key}
-          ListHeaderComponent={header}
-          keyboardShouldPersistTaps="handled"
-          extraData={[expandedId, namings]}
-          renderItem={({ item: s }) =>
-            s.kind === 'date' ? (
-              <DateDivider label={s.label} />
-            ) : (
-              <EntryItem
-                item={s.row}
-                expanded={expandedId === s.row.id}
-                onToggle={() => setExpandedId((cur) => (cur === s.row.id ? null : s.row.id))}
-                namings={namings}
-                getSettings={() => settingsRef.current}
-                onEntryChange={onEntryChange}
-                onNamingsChange={load}
-              />
-            )
-          }
-        />
+      <View style={[styles.frame, layout.sideNames && styles.framePadded]}>
+        {/* 쓰는 화면과 같은 자리에 같은 이름 목록: 이름 사이를 바로 오간다 */}
+        {layout.sideNames && (
+          <View style={{ width: layout.asideWidth }}>
+            <NameIndex namings={namings} variant="column" currentId={id} topOffset={24} />
+          </View>
+        )}
+        <View style={styles.column}>
+          {!naming && message && <Text style={[styles.hint, { color: c.muted, marginTop: 16 }]}>{message}</Text>}
+          <FlatList
+            data={stream}
+            showsVerticalScrollIndicator={false}
+            keyExtractor={(s) => s.key}
+            ListHeaderComponent={header}
+            keyboardShouldPersistTaps="handled"
+            extraData={[expandedId, namings]}
+            renderItem={({ item: s }) =>
+              s.kind === 'date' ? (
+                <DateDivider label={s.label} />
+              ) : (
+                <EntryItem
+                  item={s.row}
+                  expanded={expandedId === s.row.id}
+                  onToggle={() => setExpandedId((cur) => (cur === s.row.id ? null : s.row.id))}
+                  namings={namings}
+                  getSettings={() => settingsRef.current}
+                  onEntryChange={onEntryChange}
+                  onNamingsChange={load}
+                />
+              )
+            }
+          />
+        </View>
+        {layout.desktop && <View style={{ width: layout.asideWidth }} />}
       </View>
     </View>
   );
@@ -195,15 +218,30 @@ export default function NamingScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  column: { flex: 1, width: '100%', maxWidth: COLUMN_MAX, alignSelf: 'center', paddingHorizontal: 16 },
+  frame: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 32 },
+  framePadded: { paddingLeft: 16 },
+  column: { flex: 1, maxWidth: COLUMN_MAX, paddingHorizontal: 16 },
   header: { paddingVertical: 20, gap: 12 },
-  history: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', columnGap: 16, rowGap: 8 },
+  history: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    columnGap: 16,
+    rowGap: 8,
+  },
   version: { gap: 2 },
   oldLabel: { fontSize: 16, textDecorationLine: 'line-through' },
   currentLabel: { fontSize: 22, fontWeight: '600' },
   date: { fontSize: 13 },
   renameRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  input: { flex: 1, borderWidth: 1, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, fontSize: 15 },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    fontSize: 15,
+  },
   action: { fontSize: 14 },
   hint: { fontSize: 13 },
 });
