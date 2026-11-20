@@ -83,3 +83,13 @@ class NamingOut(Schema):
 class NamingDetail(NamingOut):
     # 이 이름이 붙은 기록, 쓴 시각 최신순
     entries: list[EntryOut]
+
+
+class ContextItemOut(Schema):
+    """검색 계층 실험용 (Step 8-2). 점수는 기록끼리의 거리일 뿐, 평가가 아니다 (P1)."""
+
+    entry: EntryOut
+    similarity: float
+    recency: float
+    shared_naming: bool
+    score: float

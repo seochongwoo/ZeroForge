@@ -2,6 +2,7 @@ import uuid
 
 from django.db import models
 from django.db.models.functions import Lower
+from pgvector.django import VectorField
 
 
 class Entry(models.Model):
@@ -92,3 +93,23 @@ class NamingLink(models.Model):
     class Meta:
         ordering = ["created_at", "id"]
         constraints = [models.UniqueConstraint(fields=["entry", "naming"], name="naminglink_entry_naming")]
+
+
+# 임베딩 차원. 모델을 바꿔도 이 값이 같으면 마이그레이션 없이 다시 임베딩만 하면 된다 (ADR 0004)
+EMBEDDING_DIMENSIONS = 1024
+
+
+class EntryEmbedding(models.Model):
+    """기록 하나의 의미 벡터 (Step 8, 검색 계층용).
+
+    Entry와 따로 둔다. Entry는 불변이지만 임베딩은 모델을 바꾸면 다시 만들어야 하기 때문이다.
+    어떤 모델로 만든 벡터인지 함께 저장하고, 지금 모델과 다르면 다시 만든다.
+    """
+
+    entry = models.OneToOneField(Entry, on_delete=models.CASCADE, primary_key=True, related_name="embedding")
+    model = models.CharField(max_length=64)
+    vector = VectorField(dimensions=EMBEDDING_DIMENSIONS)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.entry_id} ({self.model})"
