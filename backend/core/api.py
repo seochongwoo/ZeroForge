@@ -13,7 +13,7 @@ from ninja.errors import HttpError
 from .auth import TokenAuth
 from .embeddings import EmbeddingUnavailable
 from .models import Entry, Naming, NamingLink, NamingVersion
-from .retrieval import get_history_context
+from .retrieval import MIN_SIMILARITY, get_history_context
 from .schemas import ContextItemOut, EntryIn, EntryOut, EntryPage, NameIn, NamingDetail, NamingOut
 
 api = NinjaAPI(title="ZeroForge", version="0.1", auth=TokenAuth(), urls_namespace="api")
@@ -72,11 +72,19 @@ def list_entries(request, cursor: str | None = None, limit: int = Query(50, ge=1
 
 
 @api.get("/entries/{entry_id}/context", response={200: list[ContextItemOut], 503: dict})
-def history_context(request, entry_id: UUID, limit: int = Query(5, ge=1, le=20)):
-    """이 기록에 대해 서기가 참고할 과거 기록 (Step 8-2 실험용). 먼저 쓴 기록이 없으면 빈 목록 (P3)."""
+def history_context(
+    request,
+    entry_id: UUID,
+    limit: int = Query(5, ge=1, le=20),
+    min_similarity: float = Query(MIN_SIMILARITY, ge=0, le=1),
+):
+    """이 기록과 이어지는 과거 기록. 기록을 펼쳤을 때 보여주고, 서기가 참고할 후보이기도 하다.
+
+    먼저 쓴 기록 중 의미가 충분히 가까운 것이 없으면 빈 목록 (P3). 실험할 때는 min_similarity=0으로 전부 본다.
+    """
     entry = get_object_or_404(Entry, id=entry_id)
     try:
-        return Status(200, get_history_context(entry, limit=limit))
+        return Status(200, get_history_context(entry, limit=limit, min_similarity=min_similarity))
     except EmbeddingUnavailable as exc:
         return Status(503, {"detail": str(exc)})
 

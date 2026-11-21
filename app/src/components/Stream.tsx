@@ -12,6 +12,13 @@ export function dateLabel(iso: string): string {
   return `${year}${d.getMonth() + 1}월 ${d.getDate()}일 ${WEEKDAYS[d.getDay()]}`;
 }
 
+/** "11월 7일". 올해가 아니면 앞에 연도 */
+export function shortDate(iso: string): string {
+  const d = new Date(iso);
+  const year = d.getFullYear() === new Date().getFullYear() ? '' : `${d.getFullYear()}년 `;
+  return `${year}${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
 function dayKey(iso: string): string {
   const d = new Date(iso);
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;

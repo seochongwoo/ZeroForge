@@ -88,6 +88,16 @@ export function renameNaming(settings: ServerSettings, namingId: string, label: 
   return request(settings, `/namings/${namingId}/versions`, { method: 'POST', body: JSON.stringify({ label }) });
 }
 
+// ---- 이어지는 기록 (Step 8 검색 계층). AI가 글을 만들지 않고, 의미가 가까운 옛 기록을 옆에 놓을 뿐이다 ----
+
+/** 점수는 기록끼리의 거리일 뿐, 화면에 보여주지 않는다 (P1, P4) */
+export type RelatedEntry = { entry: Entry; similarity: number; recency: number; shared_naming: boolean; score: number };
+
+/** 이 기록보다 먼저 쓴 기록 중 의미가 가까운 것. 없으면 빈 목록 (P3) */
+export function getRelated(settings: ServerSettings, entryId: string, limit = 3): Promise<RelatedEntry[]> {
+  return request(settings, `/entries/${entryId}/context?limit=${limit}`);
+}
+
 /** 이름 관련 실패를 짧은 안내로 */
 export function namingErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {

@@ -15,12 +15,16 @@ from .models import Entry, EntryEmbedding, NamingLink
 # 가중치. 실험하면서 고친다. 의미가 가까운 것이 먼저이고, 나머지는 같은 값일 때의 순서를 돕는 정도다
 WEIGHT_SIMILARITY = 1.0
 WEIGHT_RECENCY = 0.1
-WEIGHT_SHARED_NAMING = 0.1
+# 이름은 지금 "성찰"·"부정" 같은 마음 상태라 기록 여럿이 함께 쓴다. 주제 신호로는 약해서, 거의 같을 때 순서만 정한다
+WEIGHT_SHARED_NAMING = 0.03
 # 이만큼 시간이 지나면 최근성 가산이 절반이 된다
 RECENCY_HALF_LIFE_DAYS = 60
 # 의미 유사도로 먼저 고른 뒤 다시 줄 세우는 후보 수
 CANDIDATES = 50
 DEFAULT_LIMIT = 5
+# 이보다 의미가 먼 기록은 "참고할 과거"로 치지 않는다 (P3). 2026-11-21 실제 기록 14개로 본 첫 기준:
+# 0.6 이상은 다 관련 있어 보였다. 기록이 늘면 다시 본다. 가산점이 아니라 유사도 자체에 건다
+MIN_SIMILARITY = 0.6
 
 
 @dataclass
@@ -56,10 +60,13 @@ def _accepted_naming_ids(entry_ids) -> dict:
     return out
 
 
-def get_history_context(entry: Entry, limit: int = DEFAULT_LIMIT) -> list[ContextItem]:
+def get_history_context(
+    entry: Entry, limit: int = DEFAULT_LIMIT, min_similarity: float = MIN_SIMILARITY
+) -> list[ContextItem]:
     """이 기록보다 먼저 쓴 기록 중에서 서기가 참고할 것.
 
-    의미 유사도 + 최근성 + 내가 같은 이름을 붙였는지. 과거가 없으면 빈 목록 (P3).
+    의미 유사도 + 최근성 + 내가 같은 이름을 붙였는지. 의미가 min_similarity보다 먼 기록은 빼고,
+    그래서 남는 것이 없으면 빈 목록 (P3).
     고정한 기록(develop_plan에 적힌 세 번째 신호)은 고정 기능이 생기면 더한다.
     """
     if not Entry.objects.filter(written_at__lt=entry.written_at).exists():
@@ -79,6 +86,8 @@ def get_history_context(entry: Entry, limit: int = DEFAULT_LIMIT) -> list[Contex
     items = []
     for c in candidates:
         similarity = 1.0 - float(c.distance)
+        if similarity < min_similarity:
+            continue
         age_days = (entry.written_at - c.entry.written_at).total_seconds() / 86400
         recency = 0.5 ** (age_days / RECENCY_HALF_LIFE_DAYS)
         shared = bool(own_names & names.get(c.entry_id, set()))

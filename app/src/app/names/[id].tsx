@@ -4,7 +4,7 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 
 import { EntryItem } from '@/components/EntryItem';
 import { NameIndex } from '@/components/NameIndex';
-import { DateDivider, toStream } from '@/components/Stream';
+import { DateDivider, shortDate as formatDate, toStream } from '@/components/Stream';
 import {
   getNaming,
   listNamings,
@@ -16,13 +16,6 @@ import {
 } from '@/lib/api';
 import { loadSettings, type ServerSettings } from '@/lib/settings';
 import { COLUMN_MAX, fonts, noOutline, useColors, useLayout } from '@/lib/theme';
-
-/** 이름이 바뀐 날: "11월 7일" (올해가 아니면 연도도) */
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  const year = d.getFullYear() === new Date().getFullYear() ? '' : `${d.getFullYear()}년 `;
-  return `${year}${d.getMonth() + 1}월 ${d.getDate()}일`;
-}
 
 /** 이름별 모아 보기: 이름의 변천 + 이 이름이 붙은 기록 (UI_CONCEPT §4-4) */
 export default function NamingScreen() {
