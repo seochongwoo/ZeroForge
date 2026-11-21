@@ -1,10 +1,11 @@
 import { router } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
   attachNaming,
   detachNaming,
+  getRelated,
   namingErrorMessage,
   type Entry,
   type Naming,
@@ -12,6 +13,7 @@ import {
   type NewEntry,
   type Source,
 } from '@/lib/api';
+import { shortDate } from '@/components/Stream';
 import type { ServerSettings } from '@/lib/settings';
 import { finePointer, fonts, noOutline, useColors, useLayout } from '@/lib/theme';
 
@@ -55,6 +57,25 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
   const [focused, setFocused] = useState(false);
   const nameInputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   const attached = useMemo(() => item.namings ?? [], [item.namings]);
+  // 이어지는 기록: 처음 펼칠 때 한 번 불러온다. 못 불러오면(오프라인, 키 없음) 조용히 아무것도 보이지 않는다
+  const [related, setRelated] = useState<Entry[] | null>(null);
+  // getSettings는 렌더마다 새 함수라, 불러오는 도중에 요청이 다시 나가지 않게 ref로 둔다
+  const getSettingsRef = useRef(getSettings);
+  useEffect(() => {
+    getSettingsRef.current = getSettings;
+  }, [getSettings]);
+  useEffect(() => {
+    if (!expanded || item.pending || related !== null) return;
+    const s = getSettingsRef.current();
+    if (!s) return;
+    let active = true;
+    getRelated(s, item.id)
+      .then((items) => active && setRelated(items.map((r) => r.entry)))
+      .catch(() => active && setRelated([]));
+    return () => {
+      active = false;
+    };
+  }, [expanded, item.pending, item.id, related]);
 
   // 이미 쓴 이름을 고를 수 있게. AI가 아니라 단순한 글자 비교다 (P2)
   const suggestions = useMemo(() => {
@@ -198,6 +219,25 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
             {message && <Text style={[styles.hint, { color: c.muted }]}>{message}</Text>}
           </View>
         ))}
+
+      {/* 의미가 가까운 옛 기록을 옆에 놓는다. 점수·개수는 보여주지 않는다 (P1, P4) */}
+      {expanded && related && related.length > 0 && (
+        <View style={styles.related} accessibilityLabel="이어지는 기록">
+          <Text style={[styles.relatedHeading, { color: c.muted }]}>이어지는 기록</Text>
+          {related.map((r) => (
+            <View key={r.id} style={[styles.relatedItem, { borderLeftColor: c.rule }]}>
+              <Text style={[styles.relatedDate, { color: c.muted }]}>{shortDate(r.written_at)}</Text>
+              <Text
+                style={[
+                  layout.desktop ? styles.relatedTextDesktop : styles.relatedText,
+                  { color: c.ink, fontFamily: fonts.serif },
+                ]}>
+                {r.content}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -226,4 +266,11 @@ const styles = StyleSheet.create({
   },
   suggestionText: { fontSize: 14, textDecorationLine: 'underline' },
   hint: { fontSize: 13 },
+  related: { gap: 10, marginTop: 10 },
+  relatedHeading: { fontSize: 13 },
+  relatedItem: { borderLeftWidth: 2, paddingLeft: 12, gap: 2 },
+  relatedDate: { fontSize: 12 },
+  // 지금 기록보다 한 단계 작게: 주인은 지금 펼친 기록이다
+  relatedText: { fontSize: 15, lineHeight: 26 },
+  relatedTextDesktop: { fontSize: 16, lineHeight: 28 },
 });

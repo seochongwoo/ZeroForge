@@ -83,7 +83,7 @@ def test_only_earlier_entries_most_similar_first():
     query = entry("#a", days=3)
     later = entry("#a", days=4)
 
-    items = get_history_context(query)
+    items = get_history_context(query, min_similarity=0)
     assert ids(items) == [near.id, half.id, far.id]
     assert query.id not in ids(items) and later.id not in ids(items)
     assert items[0].similarity == pytest.approx(1.0)
@@ -95,6 +95,36 @@ def test_limit():
         entry("#a", days=d)
     query = entry("#a", days=10)
     assert len(get_history_context(query, limit=2)) == 2
+
+
+def test_far_meaning_is_not_context():
+    entry("#ab", days=0)  # 유사도 0.71
+    entry("#abc", days=1)  # 0.58: 기준선 아래
+    entry("#z", days=2)  # 0
+    query = entry("#a", days=3)
+    items = get_history_context(query)
+    assert [round(i.similarity, 2) for i in items] == [0.71]
+
+
+def test_nothing_close_means_no_context():
+    entry("#z", days=0)
+    query = entry("#a", days=1)
+    assert get_history_context(query) == []
+
+
+def test_shared_name_only_settles_near_ties():
+    query = entry("#aab", days=1)
+    # 0.949 대 0.913: 0.03보다 크게 차이 나면 같은 이름이어도 더 가까운 쪽이 먼저
+    closer = entry("#ab", days=0)
+    named_far = entry("#aabc", days=0)
+    # 1.0 대 0.99: 거의 같으면 같은 이름이 먼저
+    near = entry("#aab", days=0)
+    named_near = entry("#aaab", days=0)
+    for e in (named_far, named_near, query):
+        name(e, "지어낸 이름")
+    order = ids(get_history_context(query, min_similarity=0))
+    assert order.index(closer.id) < order.index(named_far.id)
+    assert order.index(named_near.id) < order.index(near.id)
 
 
 def test_embeds_missing_once_and_again_when_model_changes(settings, calls):
@@ -141,8 +171,9 @@ def test_meaning_outweighs_recency():
     close_but_old = entry("#a", days=0)
     recent_unrelated = entry("#z", days=119)
     query = entry("#a", days=120)
-    assert ids(get_history_context(query))[0] == close_but_old.id
-    assert recent_unrelated.id in ids(get_history_context(query))
+    items = get_history_context(query, min_similarity=0)
+    assert ids(items)[0] == close_but_old.id
+    assert recent_unrelated.id in ids(items)
 
 
 # ---- API ----
