@@ -11,8 +11,10 @@ from ninja import NinjaAPI, Query, Status
 from ninja.errors import HttpError
 
 from .auth import TokenAuth
+from .embeddings import EmbeddingUnavailable
 from .models import Entry, Naming, NamingLink, NamingVersion
-from .schemas import EntryIn, EntryOut, EntryPage, NameIn, NamingDetail, NamingOut
+from .retrieval import get_history_context
+from .schemas import ContextItemOut, EntryIn, EntryOut, EntryPage, NameIn, NamingDetail, NamingOut
 
 api = NinjaAPI(title="ZeroForge", version="0.1", auth=TokenAuth(), urls_namespace="api")
 
@@ -67,6 +69,16 @@ def list_entries(request, cursor: str | None = None, limit: int = Query(50, ge=1
     next_cursor = encode_cursor(items[limit - 1]) if len(items) > limit else None
     return {"items": items[:limit], "next_cursor": next_cursor}
 
+
+
+@api.get("/entries/{entry_id}/context", response={200: list[ContextItemOut], 503: dict})
+def history_context(request, entry_id: UUID, limit: int = Query(5, ge=1, le=20)):
+    """이 기록에 대해 서기가 참고할 과거 기록 (Step 8-2 실험용). 먼저 쓴 기록이 없으면 빈 목록 (P3)."""
+    entry = get_object_or_404(Entry, id=entry_id)
+    try:
+        return Status(200, get_history_context(entry, limit=limit))
+    except EmbeddingUnavailable as exc:
+        return Status(503, {"detail": str(exc)})
 
 # ---- 이름 (Step 7). 이름은 전부 내가 붙인다 (P2) ----
 

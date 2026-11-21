@@ -15,6 +15,7 @@
 | `ZF_TOKEN` | 새로 만든 토큰 (로컬과 다른 값). 앱 설정 화면에 넣는다 |
 | `DJANGO_ALLOWED_HOSTS` | 배포 도메인 (예: `zeroforge.up.railway.app`). **Railway는 자동이라 필요 없음** |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://` + 배포 도메인 (관리 화면 로그인용). **Railway는 자동이라 필요 없음** |
+| `VOYAGE_API_KEY` | 임베딩 키 (Step 8, [ADR 0004](decisions/0004-embeddings.md)). 없어도 쓰기·읽기·이름은 동작하고, 검색 계층만 503 |
 
 무작위 값 만들기:
 
@@ -26,7 +27,7 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 
 ## 2. 처음 한 번
 
-배포가 뜬 뒤 DB에 pgvector를 켜 둔다 (Step 8 대비, 지금은 없어도 동작한다):
+pgvector 확장은 마이그레이션(`0003_entry_embedding`)이 켠다. 호스팅의 DB 사용자에게 확장을 만들 권한이 없으면 배포가 시작 단계에서 멈추니, 그때는 DB 콘솔에서 직접 켠다:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;

@@ -33,6 +33,9 @@ SELECT format('CREATE DATABASE %I OWNER %I', '$db', '$user')
  WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '$db') \gexec
 \c "$db"
 CREATE EXTENSION IF NOT EXISTS vector;
+-- 테스트 DB(test_zeroforge)는 template1을 복사해 만들어진다. 일반 사용자는 vector 확장을 켤 수 없으므로 원본에 미리 켜 둔다
+\c template1
+CREATE EXTENSION IF NOT EXISTS vector;
 "@
 
 $tmp = New-TemporaryFile
@@ -41,7 +44,7 @@ try {
     [System.IO.File]::WriteAllText($tmp, $sql, (New-Object System.Text.UTF8Encoding $false))
     & $psql -v ON_ERROR_STOP=1 -U postgres -h $pgHost -p $port -d postgres -f $tmp
     if ($LASTEXITCODE -ne 0) { throw "psql 실패 (exit $LASTEXITCODE)" }
-    Write-Host "완료: 사용자 '$user', DB '$db', pgvector 확장 준비됨"
+    Write-Host "완료: 사용자 '$user', DB '$db', pgvector 확장 준비됨 (테스트 DB용 template1 포함)"
 } finally {
     Remove-Item $tmp -ErrorAction SilentlyContinue
 }
