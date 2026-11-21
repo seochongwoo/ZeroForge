@@ -45,7 +45,7 @@ ZF_TOKEN = env("ZF_TOKEN", "")
 
 # 임베딩 (Step 8, ADR 0004). 키가 없으면 검색 계층만 503을 돌려주고 나머지는 그대로 동작한다
 VOYAGE_API_KEY = env("VOYAGE_API_KEY", "")
-EMBEDDING_MODEL = env("EMBEDDING_MODEL", "voyage-3.5")
+EMBEDDING_MODEL = env("EMBEDDING_MODEL", "voyage-4")
 
 INSTALLED_APPS = [
     "django.contrib.admin",

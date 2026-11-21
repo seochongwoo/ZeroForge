@@ -10,7 +10,8 @@ Step 8은 검색이 먼저다 (develop_plan Step 8). 서기가 참고할 과거 
 
 ## 결정
 
-- **공급사는 Voyage AI** (`voyage-3.5`, 1024차원). 모델 이름은 `EMBEDDING_MODEL`로 바꿀 수 있다.
+- **공급사는 Voyage AI** (`voyage-4`, 1024차원). 모델 이름은 `EMBEDDING_MODEL`로 바꿀 수 있다.
+  - `voyage-3.5`는 이전 세대라 무료 사용량이 없다. `voyage-4`는 첫 2억 토큰이 무료이고 그 뒤 100만 토큰당 $0.06 (2026-11-21 문서 기준).
   - 되돌려 받기(생성)는 Claude API로 할 예정이라, 그 단계부터 기록은 어차피 외부로 나간다. 그렇다면 검색 품질이 좋은 쪽을 고른다. 주석이 상투적일 때 가장 먼저 의심할 곳이 검색 계층이기 때문이다.
   - 공급사 호출은 `core/embeddings.py` 한 곳에만 있다. SDK 없이 표준 라이브러리로 HTTP를 직접 부른다(의존성을 늘리지 않는다).
 - **`EntryEmbedding` 테이블에 따로 저장한다.** develop_plan은 "Entry에 embedding 필드"였지만, Entry는 불변이고 임베딩은 모델을 바꾸면 다시 만들어야 한다. 어떤 모델로 만든 벡터인지 함께 저장하고, 지금 모델과 다르면 다시 만든다.
@@ -29,5 +30,5 @@ Step 8은 검색이 먼저다 (develop_plan Step 8). 서기가 참고할 과거 
 ## 결과
 
 - 운영에 `VOYAGE_API_KEY`가 필요하다. 없으면 검색 계층만 503이고 나머지는 그대로 동작한다.
-- 가입할 때 입력 데이터를 학습에 쓰는지 설정을 확인하고 끈다. 제품이 되면 개인정보 안내에 "기록 내용이 임베딩·생성을 위해 Voyage AI와 Anthropic으로 전송된다"를 적는다.
+- Voyage는 기본으로 입력을 학습에 쓸 수 있게 되어 있다(Opted In). 결제 수단을 등록한 뒤 Organization > Terms of Service에서 Opted Out으로 끈다. 제품이 되면 개인정보 안내에 "기록 내용이 임베딩·생성을 위해 Voyage AI와 Anthropic으로 전송된다"를 적는다.
 - 로컬 Windows PostgreSQL에서는 일반 사용자가 vector 확장을 켤 수 없어, `setup_local_db.ps1`이 테스트 DB의 원본(template1)에도 켜 둔다.
