@@ -12,7 +12,7 @@ from ninja.errors import HttpError
 
 from .auth import TokenAuth
 from .embeddings import EmbeddingUnavailable
-from .models import Entry, Naming, NamingLink, NamingVersion
+from .models import Entry, EntryLink, Naming, NamingLink, NamingVersion
 from .retrieval import MIN_SIMILARITY, get_history_context
 from .schemas import ContextItemOut, EntryIn, EntryOut, EntryPage, NameIn, NamingDetail, NamingOut
 
@@ -22,9 +22,15 @@ MAX_LIMIT = 200
 
 
 def entries_with_namings():
-    """EntryOut.namings에 쓸 연결을 한 번에 불러온다. 거절·제안 상태는 보여주지 않는다."""
-    links = NamingLink.objects.filter(status=NamingLink.Status.ACCEPTED).select_related("naming")
-    return Entry.objects.prefetch_related(Prefetch("naming_links", queryset=links))
+    """EntryOut의 이름·이어진 기록을 한 번에 불러온다. 거절·제안 상태는 보여주지 않는다."""
+    accepted = NamingLink.Status.ACCEPTED
+    links = NamingLink.objects.filter(status=accepted).select_related("naming")
+    entry_links = EntryLink.objects.filter(status=accepted)
+    return Entry.objects.prefetch_related(
+        Prefetch("naming_links", queryset=links),
+        Prefetch("links_out", queryset=entry_links.select_related("to_entry").order_by("to_entry__written_at")),
+        Prefetch("links_in", queryset=entry_links.select_related("from_entry").order_by("from_entry__written_at")),
+    )
 
 
 def encode_cursor(entry: Entry) -> str:
@@ -49,9 +55,15 @@ def create_entry(request, payload: EntryIn):
     existing = entries_with_namings().filter(id=payload.id).first()
     if existing:
         return Status(200, existing)
+    data = payload.dict()
+    continues = set(data.pop("continues")) - {payload.id}
     try:
         with transaction.atomic():
-            Entry.objects.create(**payload.dict())
+            entry = Entry.objects.create(**data)
+            # 이어 쓰기. 기록과 연결을 함께 만들어서, 재전송해도 연결이 따로 생기거나 빠지지 않는다.
+            # outbox는 쓴 순서대로 올라가므로 이을 기록은 보통 이미 있다. 없으면 건너뛴다 (막지 않는다)
+            targets = Entry.objects.filter(id__in=continues)
+            EntryLink.objects.bulk_create([EntryLink(from_entry=entry, to_entry=t) for t in targets])
     except IntegrityError:
         # 동시에 같은 id가 들어온 경우
         return Status(200, entries_with_namings().get(id=payload.id))

@@ -7,12 +7,24 @@ export type NewEntry = {
   content: string;
   source: Source;
   written_at: string;
+  /** 이어 쓰기: 이 기록이 이어지는 옛 기록 id */
+  continues?: string[];
 };
+
+/** 이어진 기록을 그 자리에서 보여주기 위한 최소한 */
+export type EntryRef = { id: string; content: string; written_at: string };
 
 /** 기록에 붙은 이름 (지금 이름) */
 export type NamingRef = { id: string; label: string };
 
-export type Entry = NewEntry & { created_at: string; namings: NamingRef[] };
+export type Entry = Omit<NewEntry, 'continues'> & {
+  created_at: string;
+  namings: NamingRef[];
+  /** 이 기록이 이어 쓴 옛 기록 */
+  continues: EntryRef[];
+  /** 이 기록에 이어 쓴 새 기록 */
+  continued_by: EntryRef[];
+};
 
 /** 이름의 변천. 오래된 것부터, 마지막이 지금 이름 */
 export type NamingVersion = { label: string; created_at: string };

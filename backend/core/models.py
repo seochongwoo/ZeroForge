@@ -95,6 +95,31 @@ class NamingLink(models.Model):
         constraints = [models.UniqueConstraint(fields=["entry", "naming"], name="naminglink_entry_naming")]
 
 
+class EntryLink(models.Model):
+    """기록과 기록의 연결 (PLAN.md §5의 Link 중 Entry–Entry).
+
+    지금은 "이어 쓰기"로 내가 직접 이은 것만 있다: 새 기록(from_entry)이 옛 기록(to_entry)에 이어진다.
+    기록은 불변이라 옛 기록을 고치지 않고, 연결된 새 기록으로 생각이 이어진다.
+    Step 8에서 서기의 연결 제안은 author=ai, status=proposed로 들어오고, 거둔 것도 지우지 않고 남긴다.
+    """
+
+    from_entry = models.ForeignKey(Entry, on_delete=models.CASCADE, related_name="links_out")
+    to_entry = models.ForeignKey(Entry, on_delete=models.CASCADE, related_name="links_in")
+    author = models.CharField(max_length=8, choices=NamingLink.Author.choices, default=NamingLink.Author.USER)
+    status = models.CharField(max_length=10, choices=NamingLink.Status.choices, default=NamingLink.Status.ACCEPTED)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["from_entry", "to_entry"], name="entrylink_from_to"),
+            models.CheckConstraint(condition=~models.Q(from_entry=models.F("to_entry")), name="entrylink_not_self"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.from_entry_id} → {self.to_entry_id} ({self.author}, {self.status})"
+
+
 # 임베딩 차원. 모델을 바꿔도 이 값이 같으면 마이그레이션 없이 다시 임베딩만 하면 된다 (ADR 0004)
 EMBEDDING_DIMENSIONS = 1024
 
