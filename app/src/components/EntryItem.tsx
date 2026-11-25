@@ -8,6 +8,7 @@ import {
   getRelated,
   namingErrorMessage,
   type Entry,
+  type EntryRef,
   type Naming,
   type NamingRef,
   type NewEntry,
@@ -17,7 +18,12 @@ import { shortDate } from '@/components/Stream';
 import type { ServerSettings } from '@/lib/settings';
 import { finePointer, fonts, noOutline, useColors, useLayout } from '@/lib/theme';
 
-export type Row = (Entry | (NewEntry & { namings?: NamingRef[] })) & {
+/** 화면에 보이는 기록 하나: 서버에 있는 기록, 또는 아직 기기에만 있는 기록 */
+export type Row = Omit<NewEntry, 'continues'> & {
+  created_at?: string;
+  namings?: NamingRef[];
+  continues?: EntryRef[];
+  continued_by?: EntryRef[];
   pending: boolean;
 };
 
@@ -45,10 +51,39 @@ type Props = {
   onEntryChange: (entry: Entry) => void;
   /** 새 이름이 생겼을 수 있으니 이름 목록을 다시 읽으라는 신호 */
   onNamingsChange?: () => void;
+  /** 이 기록에 이어 쓰기. 쓰는 칸이 있는 화면에서만 준다 */
+  onContinue?: (item: Row) => void;
 };
 
+/** 옛 기록을 그 자리에 조용히 놓는다: 날짜 + 내용, 왼쪽 가는 선 */
+function QuotedEntry({ entry }: { entry: EntryRef }) {
+  const c = useColors();
+  const layout = useLayout();
+  return (
+    <View style={[styles.relatedItem, { borderLeftColor: c.rule }]}>
+      <Text style={[styles.relatedDate, { color: c.muted }]}>{shortDate(entry.written_at)}</Text>
+      <Text
+        style={[
+          layout.desktop ? styles.relatedTextDesktop : styles.relatedText,
+          { color: c.ink, fontFamily: fonts.serif },
+        ]}>
+        {entry.content}
+      </Text>
+    </View>
+  );
+}
+
 /** 기록 하나. 누르면 그 자리에서 펼쳐지고, 펼친 곳에서 이름을 붙인다 (UI_CONCEPT §4-3, §4-4). */
-export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEntryChange, onNamingsChange }: Props) {
+export function EntryItem({
+  item,
+  expanded,
+  onToggle,
+  namings,
+  getSettings,
+  onEntryChange,
+  onNamingsChange,
+  onContinue,
+}: Props) {
   const c = useColors();
   const layout = useLayout();
   const [label, setLabel] = useState('');
@@ -57,6 +92,8 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
   const [focused, setFocused] = useState(false);
   const nameInputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   const attached = useMemo(() => item.namings ?? [], [item.namings]);
+  const continues = item.continues ?? [];
+  const continuedBy = item.continued_by ?? [];
   // 이어지는 기록: 처음 펼칠 때 한 번 불러온다. 못 불러오면(오프라인, 키 없음) 조용히 아무것도 보이지 않는다
   const [related, setRelated] = useState<Entry[] | null>(null);
   // getSettings는 렌더마다 새 함수라, 불러오는 도중에 요청이 다시 나가지 않게 ref로 둔다
@@ -76,6 +113,11 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
       active = false;
     };
   }, [expanded, item.pending, item.id, related]);
+
+  const relatedShown = useMemo(() => {
+    const linked = new Set([...(item.continues ?? []), ...(item.continued_by ?? [])].map((r) => r.id));
+    return (related ?? []).filter((r) => !linked.has(r.id));
+  }, [related, item.continues, item.continued_by]);
 
   // 이미 쓴 이름을 고를 수 있게. AI가 아니라 단순한 글자 비교다 (P2)
   const suggestions = useMemo(() => {
@@ -129,6 +171,12 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
         {expanded && (
           <Text style={[styles.meta, { color: c.muted }]}>
             {formatClock(item.written_at)} · {SOURCE_LABEL[item.source]}
+          </Text>
+        )}
+        {/* 이어 쓴 기록이면, 무엇에 이어서인지 조용히. 펼치면 옛 기록이 그 자리에 놓인다 */}
+        {continues.length > 0 && (
+          <Text style={[styles.meta, { color: c.muted }]}>
+            ↳ {continues.map((r) => shortDate(r.written_at)).join(', ')} 기록에 이어서
           </Text>
         )}
         <Text style={[styles.content, layout.body, { color: c.ink, fontFamily: fonts.serif }]}>
@@ -220,21 +268,41 @@ export function EntryItem({ item, expanded, onToggle, namings, getSettings, onEn
           </View>
         ))}
 
-      {/* 의미가 가까운 옛 기록을 옆에 놓는다. 점수·개수는 보여주지 않는다 (P1, P4) */}
-      {expanded && related && related.length > 0 && (
-        <View style={styles.related} accessibilityLabel="이어지는 기록">
-          <Text style={[styles.relatedHeading, { color: c.muted }]}>이어지는 기록</Text>
-          {related.map((r) => (
-            <View key={r.id} style={[styles.relatedItem, { borderLeftColor: c.rule }]}>
-              <Text style={[styles.relatedDate, { color: c.muted }]}>{shortDate(r.written_at)}</Text>
-              <Text
-                style={[
-                  layout.desktop ? styles.relatedTextDesktop : styles.relatedText,
-                  { color: c.ink, fontFamily: fonts.serif },
-                ]}>
-                {r.content}
-              </Text>
-            </View>
+      {expanded && !item.pending && onContinue && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityHint="이 기록에 이어서 새 기록 쓰기"
+          onPress={() => onContinue(item)}
+          hitSlop={8}
+          style={styles.continueButton}>
+          <Text style={[styles.continueText, { color: c.muted }]}>이어 쓰기</Text>
+        </Pressable>
+      )}
+
+      {/* 내가 직접 이은 기록 (EntryLink). 닮은 기록보다 먼저, 내가 만든 연결이니까 */}
+      {expanded && continues.length > 0 && (
+        <View style={styles.related} accessibilityLabel="이어 쓴 옛 기록">
+          <Text style={[styles.relatedHeading, { color: c.muted }]}>이어 쓴 옛 기록</Text>
+          {continues.map((r) => (
+            <QuotedEntry key={r.id} entry={r} />
+          ))}
+        </View>
+      )}
+      {expanded && continuedBy.length > 0 && (
+        <View style={styles.related} accessibilityLabel="이 기록에 이어 쓴 것">
+          <Text style={[styles.relatedHeading, { color: c.muted }]}>이 기록에 이어 쓴 것</Text>
+          {continuedBy.map((r) => (
+            <QuotedEntry key={r.id} entry={r} />
+          ))}
+        </View>
+      )}
+
+      {/* 의미가 닮은 옛 기록을 옆에 놓는다. 이미 이은 기록은 빼고, 점수·개수는 보여주지 않는다 (P1, P4) */}
+      {expanded && relatedShown.length > 0 && (
+        <View style={styles.related} accessibilityLabel="닮은 기록">
+          <Text style={[styles.relatedHeading, { color: c.muted }]}>닮은 기록</Text>
+          {relatedShown.map((r) => (
+            <QuotedEntry key={r.id} entry={r} />
           ))}
         </View>
       )}
@@ -266,6 +334,8 @@ const styles = StyleSheet.create({
   },
   suggestionText: { fontSize: 14, textDecorationLine: 'underline' },
   hint: { fontSize: 13 },
+  continueButton: { alignSelf: 'flex-start', marginTop: 2 },
+  continueText: { fontSize: 14, textDecorationLine: 'underline' },
   related: { gap: 10, marginTop: 10 },
   relatedHeading: { fontSize: 13 },
   relatedItem: { borderLeftWidth: 2, paddingLeft: 12, gap: 2 },

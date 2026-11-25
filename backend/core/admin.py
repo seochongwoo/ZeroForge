@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Entry, Naming, NamingLink, NamingVersion
+from .models import Entry, EntryLink, Naming, NamingLink, NamingVersion
 
 
 @admin.register(Entry)
@@ -38,4 +38,10 @@ class NamingAdmin(admin.ModelAdmin):
 @admin.register(NamingLink)
 class NamingLinkAdmin(admin.ModelAdmin):
     list_display = ("naming", "entry", "author", "status", "created_at")
+    list_filter = ("author", "status")
+
+
+@admin.register(EntryLink)
+class EntryLinkAdmin(admin.ModelAdmin):
+    list_display = ("from_entry", "to_entry", "author", "status", "created_at")
     list_filter = ("author", "status")

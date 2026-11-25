@@ -1,22 +1,13 @@
 import NetInfo from '@react-native-community/netinfo';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  AppState,
-  FlatList,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { AppState, FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EntryItem, type Row } from '@/components/EntryItem';
 import { NameIndex } from '@/components/NameIndex';
-import { DateDivider, toStream } from '@/components/Stream';
-import { listEntries, listNamings, type Entry, type Naming, type NewEntry } from '@/lib/api';
+import { DateDivider, shortDate, toStream, type StreamItem } from '@/components/Stream';
+import { listEntries, listNamings, type Entry, type EntryRef, type Naming, type NewEntry } from '@/lib/api';
 import { enqueue, flushOutbox, loadDraft, loadOutbox, saveDraft } from '@/lib/outbox';
 import { loadSettings, type ServerSettings } from '@/lib/settings';
 import { COLUMN_MAX, fonts, noOutline, useColors, useLayout } from '@/lib/theme';
@@ -36,6 +27,9 @@ export default function WriteScreen() {
   const [namings, setNamings] = useState<Naming[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  // 이어 쓰기: 지금 쓰는 글이 이어질 옛 기록
+  const [continuing, setContinuing] = useState<EntryRef | null>(null);
+  const listRef = useRef<FlatList<StreamItem>>(null);
   const loadingMore = useRef(false);
   const expandedRef = useRef<string | null>(null);
   useEffect(() => {
@@ -130,8 +124,10 @@ export default function WriteScreen() {
   async function onSave() {
     if (!text.trim()) return;
     const content = text;
+    const continues = continuing ? [continuing.id] : [];
     setText('');
-    await enqueue(content);
+    setContinuing(null);
+    await enqueue(content, continues);
     await refreshPending();
     inputRef.current?.focus();
     sync();
@@ -152,6 +148,14 @@ export default function WriteScreen() {
     }
   }
 
+  // 펼친 기록에서 "이어 쓰기": 쓰는 칸으로 올라가 그 기록에 이어서 쓴다. 쓰던 글은 그대로 둔다
+  const startContinue = useCallback((row: Row) => {
+    setContinuing({ id: row.id, content: row.content, written_at: row.written_at });
+    setExpandedId(null);
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
   const replaceEntry = useCallback((updated: Entry) => {
     setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
   }, []);
@@ -159,7 +163,18 @@ export default function WriteScreen() {
   // 서버 기록 + 아직 outbox에 있는 기록을 함께 보여준다
   const rows: Row[] = useMemo(() => {
     const serverIds = new Set(entries.map((e) => e.id));
-    const local = pending.filter((p) => !serverIds.has(p.id)).map((p) => ({ ...p, pending: true }));
+    // 아직 기기에만 있는 기록도 무엇에 이어 썼는지 보이게, 이은 기록을 찾아 붙인다
+    const known = new Map<string, EntryRef>([...entries, ...pending].map((e) => [e.id, e]));
+    const local = pending
+      .filter((p) => !serverIds.has(p.id))
+      .map(({ continues, ...p }) => ({
+        ...p,
+        continues: (continues ?? []).flatMap((id) => {
+          const ref = known.get(id);
+          return ref ? [{ id: ref.id, content: ref.content, written_at: ref.written_at }] : [];
+        }),
+        pending: true,
+      }));
     const remote = entries.map((e) => ({ ...e, pending: false }));
     return [...local.reverse(), ...remote];
   }, [entries, pending]);
@@ -178,13 +193,37 @@ export default function WriteScreen() {
 
   const writeBox = (
     <>
+      {continuing && (
+        <View style={[styles.continuing, { borderLeftColor: c.rule }]} accessibilityLabel="이어 쓰는 기록">
+          <View style={styles.continuingHead}>
+            <Text style={[styles.continuingLabel, { color: c.muted }]}>
+              {shortDate(continuing.written_at)} 기록에 이어서
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="이어 쓰기 그만두기"
+              onPress={() => setContinuing(null)}
+              hitSlop={10}>
+              <Text style={[styles.continuingLabel, { color: c.muted }]}>×</Text>
+            </Pressable>
+          </View>
+          <Text numberOfLines={2} style={[styles.continuingText, { color: c.ink, fontFamily: fonts.serif }]}>
+            {continuing.content}
+          </Text>
+        </View>
+      )}
       <TextInput
         ref={inputRef}
         style={[
           styles.input,
           layout.body,
           noOutline,
-          { color: c.ink, borderColor: focused ? c.muted : c.rule, backgroundColor: c.surface, fontFamily: fonts.serif },
+          {
+            color: c.ink,
+            borderColor: focused ? c.muted : c.rule,
+            backgroundColor: c.surface,
+            fontFamily: fonts.serif,
+          },
         ]}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -231,6 +270,7 @@ export default function WriteScreen() {
           </View>
 
           <FlatList
+            ref={listRef}
             style={styles.list}
             // 흐름 옆의 스크롤 막대는 숨긴다. 휠·터치 스크롤은 그대로
             showsVerticalScrollIndicator={false}
@@ -258,6 +298,7 @@ export default function WriteScreen() {
                   getSettings={() => settingsRef.current}
                   onEntryChange={replaceEntry}
                   onNamingsChange={reloadNamings}
+                  onContinue={startContinue}
                 />
               )
             }
@@ -284,9 +325,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 14,
   },
-  actions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+  },
   notice: { flex: 1, fontSize: 13 },
   button: { borderRadius: 6, paddingVertical: 9, paddingHorizontal: 20 },
   buttonText: { fontSize: 15, fontWeight: '600' },
   list: { flex: 1 },
+  continuing: { borderLeftWidth: 2, paddingLeft: 12, marginBottom: 10, gap: 2 },
+  continuingHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  continuingLabel: { fontSize: 13 },
+  continuingText: { fontSize: 15, lineHeight: 24 },
 });

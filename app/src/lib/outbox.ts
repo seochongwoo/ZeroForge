@@ -55,12 +55,14 @@ function nowWithOffset(): string {
 }
 
 /** 기록을 outbox에 넣고 draft를 비운다. 서버 전송은 flush가 맡는다. */
-export async function enqueue(content: string): Promise<NewEntry> {
+export async function enqueue(content: string, continues: string[] = []): Promise<NewEntry> {
   const entry: NewEntry = {
     id: Crypto.randomUUID(),
     content,
     source,
     written_at: nowWithOffset(),
+    // 이어 쓴 옛 기록. outbox는 쓴 순서대로 올라가므로, 옛 기록이 기기에만 있어도 먼저 올라간다
+    ...(continues.length > 0 && { continues }),
   };
   const items = await loadOutbox();
   await writeOutbox([...items, entry]);
